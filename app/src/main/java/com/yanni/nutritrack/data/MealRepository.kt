@@ -2,6 +2,8 @@ package com.yanni.nutritrack.data
 
 import com.yanni.nutritrack.model.Ingredient
 import com.yanni.nutritrack.model.Meal
+import com.yanni.nutritrack.nutrition.Nutrition
+import com.yanni.nutritrack.nutrition.NutritionCalculator
 import java.util.Calendar
 import java.util.TimeZone
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -47,28 +49,47 @@ class MealRepository(private val dao: MealDao) {
                 name = row.meal.name,
                 consumedAt = row.meal.consumedAt,
                 ingredients = row.ingredients.sortedBy { it.position }.map {
-                    Ingredient(it.id, it.name, it.quantity.orEmpty(), it.unit.orEmpty())
+                    Ingredient(
+                        it.id, it.name, it.quantity.orEmpty(), it.unit.orEmpty(),
+                        Nutrition(
+                            it.calories, it.proteinGrams, it.carbsGrams, it.fatGrams,
+                            it.nutritionStatus, it.nutritionSource
+                        )
+                    )
                 }
             )
         }
     }
 
     suspend fun saveMeal(meal: Meal) {
+        val ingredients = meal.ingredients.mapIndexed { index, ingredient ->
+            // Always recompute, including edits that make a previously known value unknown.
+            val nutrition = NutritionCalculator.calculate(ingredient.name, ingredient.quantity, ingredient.unit)
+            IngredientEntity(
+                mealId = meal.id,
+                name = ingredient.name.trim(),
+                quantity = ingredient.quantity.trim().ifEmpty { null },
+                unit = ingredient.unit.trim().ifEmpty { null },
+                position = index,
+                calories = nutrition.calories,
+                proteinGrams = nutrition.proteinGrams,
+                carbsGrams = nutrition.carbsGrams,
+                fatGrams = nutrition.fatGrams,
+                nutritionStatus = nutrition.status,
+                nutritionSource = nutrition.source
+            )
+        }
+        if (meal.id != 0L) {
+            dao.updateMealWithIngredients(meal.id, meal.name.trim(), ingredients)
+            return
+        }
         dao.insertMealWithIngredients(
             MealEntity(
                 name = meal.name.trim(),
                 consumedAt = meal.consumedAt,
                 timeZoneId = TimeZone.getDefault().id
             ),
-            meal.ingredients.mapIndexed { index, ingredient ->
-                IngredientEntity(
-                    mealId = 0, // Replaced with the generated meal ID inside the transaction.
-                    name = ingredient.name.trim(),
-                    quantity = ingredient.quantity.trim().ifEmpty { null },
-                    unit = ingredient.unit.trim().ifEmpty { null },
-                    position = index
-                )
-            }
+            ingredients
         )
     }
 

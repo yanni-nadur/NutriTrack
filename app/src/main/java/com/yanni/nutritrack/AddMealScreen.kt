@@ -41,11 +41,22 @@ fun AddMealScreen(
     onSave: (Meal) -> Unit,
     modifier: Modifier = Modifier,
     saving: Boolean = false,
+    deleting: Boolean = false,
+    initialMeal: Meal? = null,
+    onDelete: () -> Unit = {},
     saveError: String? = null
 ) {
-    var mealName by remember { mutableStateOf("") }
-    val ingredients = remember { mutableStateListOf(Ingredient(id = 0)) }
-    var nextId by remember { mutableStateOf(1L) }
+    val editing = initialMeal != null
+    val busy = saving || deleting
+    var mealName by remember(initialMeal?.id) { mutableStateOf(initialMeal?.name.orEmpty()) }
+    val ingredients = remember(initialMeal?.id) {
+        mutableStateListOf<Ingredient>().apply {
+            addAll(initialMeal?.ingredients ?: listOf(Ingredient(id = 0)))
+        }
+    }
+    var nextId by remember(initialMeal?.id) {
+        mutableStateOf((ingredients.maxOfOrNull { it.id } ?: 0L) + 1)
+    }
     val canSave = mealName.isNotBlank() && ingredients.isNotEmpty() &&
         ingredients.all { it.name.isNotBlank() }
 
@@ -56,14 +67,17 @@ fun AddMealScreen(
     ) {
         item {
             Column {
-                TextButton(onClick = onBack, enabled = !saving) { Text("← Voltar") }
-                Text("Adicionar refeição", style = MaterialTheme.typography.headlineMedium)
+                TextButton(onClick = onBack, enabled = !busy) { Text("← Voltar") }
+                Text(
+                    if (editing) "Editar refeição" else "Adicionar refeição",
+                    style = MaterialTheme.typography.headlineMedium
+                )
             }
         }
         item {
             OutlinedTextField(
                 value = mealName,
-                enabled = !saving,
+                enabled = !busy,
                 onValueChange = { mealName = it },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Nome da refeição") },
@@ -77,7 +91,7 @@ fun AddMealScreen(
         items(ingredients, key = { it.id }) { ingredient ->
             IngredientCard(
                 ingredient = ingredient,
-                enabled = !saving,
+                enabled = !busy,
                 onChange = { updated ->
                     val index = ingredients.indexOfFirst { it.id == updated.id }
                     if (index >= 0) ingredients[index] = updated
@@ -88,7 +102,7 @@ fun AddMealScreen(
         item {
             OutlinedButton(
                 onClick = { ingredients.add(Ingredient(id = nextId++)) },
-                enabled = !saving,
+                enabled = !busy,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("+ Adicionar ingrediente")
@@ -107,6 +121,8 @@ fun AddMealScreen(
                     onClick = {
                         onSave(
                             Meal(
+                                id = initialMeal?.id ?: 0,
+                                consumedAt = initialMeal?.consumedAt ?: System.currentTimeMillis(),
                                 name = mealName.trim(),
                                 ingredients = ingredients.map {
                                     it.copy(name = it.name.trim(), quantity = it.quantity.trim())
@@ -114,11 +130,27 @@ fun AddMealScreen(
                             )
                         )
                     },
-                    enabled = canSave && !saving,
+                    enabled = canSave && !busy,
                     modifier = Modifier.fillMaxWidth(),
                     contentPadding = PaddingValues(16.dp)
                 ) {
-                    Text(if (saving) "Salvando…" else "Salvar refeição")
+                    Text(
+                        if (saving) "Salvando…"
+                        else if (editing) "Salvar alterações"
+                        else "Salvar refeição"
+                    )
+                }
+                if (editing) {
+                    TextButton(
+                        onClick = onDelete,
+                        enabled = !busy,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            if (deleting) "Excluindo…" else "Excluir refeição",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             }
         }

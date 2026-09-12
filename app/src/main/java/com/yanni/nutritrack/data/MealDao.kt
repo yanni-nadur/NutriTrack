@@ -30,6 +30,26 @@ abstract class MealDao {
     @Query("SELECT * FROM meals WHERE consumedAt >= :start AND consumedAt < :end ORDER BY consumedAt DESC, id DESC")
     abstract fun observeMealsBetween(start: Long, end: Long): Flow<List<MealWithIngredients>>
 
+    @Query("UPDATE meals SET name = :name WHERE id = :mealId")
+    protected abstract suspend fun updateMealName(mealId: Long, name: String): Int
+
+    @Query("DELETE FROM ingredients WHERE mealId = :mealId")
+    protected abstract suspend fun deleteIngredients(mealId: Long)
+
+    // Replace the ingredient list atomically, preserving the meal's ID and original date/time.
+    @Transaction
+    open suspend fun updateMealWithIngredients(
+        mealId: Long,
+        name: String,
+        ingredients: List<IngredientEntity>
+    ) {
+        require(name.isNotBlank())
+        require(ingredients.isNotEmpty() && ingredients.all { it.name.isNotBlank() })
+        check(updateMealName(mealId, name) == 1) { "Meal no longer exists" }
+        deleteIngredients(mealId)
+        insertIngredients(ingredients.map { it.copy(id = 0, mealId = mealId) })
+    }
+
     // Foreign-key cascading removes the meal's ingredients as well.
     @Query("DELETE FROM meals WHERE id = :mealId")
     abstract suspend fun deleteMeal(mealId: Long)

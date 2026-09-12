@@ -1,11 +1,14 @@
 package com.yanni.nutritrack.data
 
 import androidx.room.Embedded
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.Relation
+import com.yanni.nutritrack.nutrition.NutritionSource
+import com.yanni.nutritrack.nutrition.NutritionStatus
 
 @Entity(tableName = "meals", indices = [Index("consumedAt")])
 data class MealEntity(
@@ -32,7 +35,14 @@ data class IngredientEntity(
     val name: String,
     val quantity: String? = null,
     val unit: String? = null,
-    val position: Int
+    val position: Int,
+    val calories: Double? = null,
+    val proteinGrams: Double? = null,
+    val carbsGrams: Double? = null,
+    val fatGrams: Double? = null,
+    @ColumnInfo(defaultValue = "'NOT_CALCULATED'")
+    val nutritionStatus: NutritionStatus = NutritionStatus.NOT_CALCULATED,
+    val nutritionSource: NutritionSource? = null
 )
 
 data class MealWithIngredients(

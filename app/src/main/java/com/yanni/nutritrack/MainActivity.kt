@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -61,6 +62,9 @@ private fun NutriTrackApp(viewModel: MealsViewModel, modifier: Modifier = Modifi
             onBack = viewModel::closeAddMeal,
             onSave = viewModel::saveMeal,
             saving = form.saving,
+            deleting = form.deleting,
+            initialMeal = form.editingMeal,
+            onDelete = viewModel::deleteMeal,
             saveError = form.error
         )
     } else {
@@ -70,7 +74,8 @@ private fun NutriTrackApp(viewModel: MealsViewModel, modifier: Modifier = Modifi
             loading = home.loading,
             loadError = home.error,
             onRetry = viewModel::reloadMeals,
-            onAddMeal = viewModel::openAddMeal
+            onAddMeal = viewModel::openAddMeal,
+            onEditMeal = viewModel::openEditMeal
         )
     }
 }
@@ -82,7 +87,8 @@ fun HomeScreen(
     loading: Boolean = false,
     loadError: String? = null,
     onRetry: () -> Unit = {},
-    onAddMeal: () -> Unit = {}
+    onAddMeal: () -> Unit = {},
+    onEditMeal: (Meal) -> Unit = {}
 ) {
     Column(
         modifier = modifier
@@ -116,7 +122,9 @@ fun HomeScreen(
                 )
             }
             meals.forEach { meal ->
-                Card(modifier = Modifier.fillMaxWidth()) {
+                Card(modifier = Modifier.fillMaxWidth().clickable(
+                    onClickLabel = "Editar refeição"
+                ) { onEditMeal(meal) }) {
                     Column(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)

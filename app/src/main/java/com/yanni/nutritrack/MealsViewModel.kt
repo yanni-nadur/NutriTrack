@@ -27,6 +27,8 @@ data class HomeState(
 data class MealFormState(
     val visible: Boolean = false,
     val saving: Boolean = false,
+    val deleting: Boolean = false,
+    val editingMeal: Meal? = null,
     val error: String? = null
 )
 
@@ -46,13 +48,17 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
 
     fun reloadMeals() { reload.value++ }
     fun openAddMeal() { _form.value = MealFormState(visible = true) }
+    fun openEditMeal(meal: Meal) {
+        _form.value = MealFormState(visible = true, editingMeal = meal)
+    }
     fun closeAddMeal() {
-        if (!_form.value.saving) _form.value = MealFormState()
+        if (!_form.value.saving && !_form.value.deleting) _form.value = MealFormState()
     }
 
     fun saveMeal(meal: Meal) {
-        if (_form.value.saving) return
-        _form.value = MealFormState(visible = true, saving = true)
+        if (_form.value.saving || _form.value.deleting) return
+        val current = _form.value
+        _form.value = current.copy(saving = true, error = null)
         viewModelScope.launch {
             try {
                 repository.saveMeal(meal)
@@ -60,9 +66,27 @@ class MealsViewModel(application: Application) : AndroidViewModel(application) {
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
-                _form.value = MealFormState(
-                    visible = true,
+                _form.value = current.copy(
                     error = "Não foi possível salvar a refeição. Tente novamente."
+                )
+            }
+        }
+    }
+
+    fun deleteMeal() {
+        val current = _form.value
+        val meal = current.editingMeal ?: return
+        if (current.saving || current.deleting) return
+        _form.value = current.copy(deleting = true, error = null)
+        viewModelScope.launch {
+            try {
+                repository.deleteMeal(meal.id)
+                _form.value = MealFormState()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                _form.value = current.copy(
+                    error = "Não foi possível excluir a refeição. Tente novamente."
                 )
             }
         }

@@ -87,6 +87,59 @@ class MealDatabaseTest {
     }
 
     @Test
+    fun editingReplacesIngredientsAndPreservesMealDateAfterReopening() = runBlocking {
+        val id = insert(1500)
+        val untouchedId = insert(1600, "Outra refeição")
+        val repository = MealRepository(database.mealDao())
+        repository.saveMeal(
+            com.yanni.nutritrack.model.Meal(
+                id = id,
+                name = "Almoço atualizado",
+                ingredients = listOf(
+                    com.yanni.nutritrack.model.Ingredient(1, "Arroz integral", "200", "g"),
+                    com.yanni.nutritrack.model.Ingredient(3, "Salada", "", "")
+                )
+            )
+        )
+        database.close()
+        database = openDatabase()
+        val rows = database.mealDao().observeMealsBetween(1000, 2000).first()
+        assertEquals(2, rows.size)
+        val updated = rows.single { it.meal.id == id }
+        assertEquals("Almoço atualizado", updated.meal.name)
+        assertEquals(1500L, updated.meal.consumedAt)
+        assertEquals("America/Sao_Paulo", updated.meal.timeZoneId)
+        val ingredients = updated.ingredients.sortedBy { it.position }
+        assertEquals(listOf("Arroz integral", "Salada"), ingredients.map { it.name })
+        assertEquals("200", ingredients[0].quantity)
+        assertEquals("g", ingredients[0].unit)
+        assertNull(ingredients[1].quantity)
+        assertNull(ingredients[1].unit)
+        assertEquals(2, rows.single { it.meal.id == untouchedId }.ingredients.size)
+    }
+
+    @Test
+    fun failedUpdateRestoresOriginalNameAndIngredients() = runBlocking {
+        val id = insert(1500)
+        val original = database.mealDao().observeMealsBetween(1000, 2000).first().single()
+        database.openHelper.writableDatabase.execSQL(
+            "CREATE TRIGGER reject_update BEFORE INSERT ON ingredients " +
+                "WHEN NEW.name = 'Rejeitado' BEGIN SELECT RAISE(ABORT, 'Test failure'); END"
+        )
+        try {
+            database.mealDao().updateMealWithIngredients(
+                id, "Novo nome",
+                listOf(IngredientEntity(mealId = id, name = "Rejeitado", position = 0))
+            )
+            fail("Expected the test trigger to reject the update")
+        } catch (_: android.database.sqlite.SQLiteException) {
+            val restored = database.mealDao().observeMealsBetween(1000, 2000).first().single()
+            assertEquals(original.meal, restored.meal)
+            assertEquals(original.ingredients.sortedBy { it.id }, restored.ingredients.sortedBy { it.id })
+        }
+    }
+
+    @Test
     fun failedIngredientInsertRollsBackEntireMeal() = runBlocking {
         database.openHelper.writableDatabase.execSQL(
             "CREATE TRIGGER reject_ingredient BEFORE INSERT ON ingredients " +
